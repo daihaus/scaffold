@@ -4,7 +4,7 @@
 
 [tools]
 node = "24"
-pnpm = "11.12.0"
+pnpm = "11.13.1"
 uv = "0.11"
 # Rust is opt-in so repos without Rust crates don't pay the toolchain install on
 # every `mise install` / CI run. Uncomment (then `mise install`) when you add your
