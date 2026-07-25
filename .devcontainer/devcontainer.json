@@ -84,7 +84,7 @@
   // Use 'postCreateCommand' to run commands after the container is created.
   // mise installs pnpm, uv, and AutoCorrect; uv manages Python itself (from .python-version). Rust is opt-in (uncomment it in mise.toml).
   // The guarded echos activate mise in interactive shells so the tools are on PATH.
-  "postCreateCommand": "curl https://mise.run | MISE_VERSION=v2026.6.1 sh && ~/.local/bin/mise trust && ~/.local/bin/mise run setup && { grep -qsF 'mise activate zsh' ~/.zshrc || echo 'eval \"$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc; } && { grep -qsF 'mise activate bash' ~/.bashrc || echo 'eval \"$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc; }",
+  "postCreateCommand": "curl -fsSL https://mise.run | MISE_VERSION=v2026.7.13 sh && ~/.local/bin/mise trust && ~/.local/bin/mise run setup && { grep -qsF 'mise activate zsh' ~/.zshrc || echo 'eval \"$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc; } && { grep -qsF 'mise activate bash' ~/.bashrc || echo 'eval \"$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc; }",
   // Set `remoteUser` to `root` to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
   "remoteUser": "vscode"
 }
