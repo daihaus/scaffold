@@ -22,10 +22,36 @@ fi
 git lfs install --skip-repo
 git lfs pull
 
+mise_version="v2026.7.13"
 mise_bin="$(command -v mise || true)"
 if [[ -z "$mise_bin" ]]; then
-  echo "Installing mise..."
-  curl -fsSL https://mise.run | MISE_VERSION=v2026.7.13 sh
+  case "$(uname -m)" in
+    x86_64)
+      mise_arch="x64"
+      mise_sha256="2dfb74b2e09d1f73a4cfa0c4db0332418e39d35940b48f501b3b4004b59a379c"
+      ;;
+    aarch64 | arm64)
+      mise_arch="arm64"
+      mise_sha256="c002f9c3fd8ef7535afb5e20006cbdcc5f7e8144f7210057c241ec7e902743bc"
+      ;;
+    *)
+      echo "Unsupported architecture for mise: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  echo "Installing mise $mise_version..."
+  mise_archive="mise-${mise_version}-linux-${mise_arch}.tar.gz"
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "$temp_dir"' EXIT
+  curl -fsSL -o "$temp_dir/$mise_archive" \
+    "https://github.com/jdx/mise/releases/download/$mise_version/$mise_archive"
+  printf '%s  %s\n' "$mise_sha256" "$temp_dir/$mise_archive" | sha256sum --check
+  tar -xzf "$temp_dir/$mise_archive" -C "$temp_dir" mise/bin/mise
+  mkdir -p "$HOME/.local/bin"
+  install -m 0755 "$temp_dir/mise/bin/mise" "$HOME/.local/bin/mise"
+  rm -rf "$temp_dir"
+  trap - EXIT
   mise_bin="$HOME/.local/bin/mise"
 fi
 
@@ -39,16 +65,16 @@ profile_marker="# krosdai-scaffold mise activation"
 if [[ ! -e "$profile_file" ]]; then
   printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >"$profile_file"
 fi
-if ! grep -Fqx "$profile_marker" "$profile_file"; then
-  cat >>"$profile_file" <<EOF
-
-$profile_marker
-if [[ "\${PWD}" == "$repo_root" || "\${PWD}" == "$repo_root/"* ]]; then
-  export PATH="\${HOME}/.local/bin:\${PATH}"
-  eval "\$("$mise_bin" activate bash)"
+if grep -Fqx "$profile_marker" "$profile_file"; then
+  sed -i "\|^${profile_marker}$|,/^fi$/d" "$profile_file"
+fi
+printf '%s\n' "$profile_marker" >>"$profile_file"
+cat >>"$profile_file" <<'EOF'
+export PATH="${HOME}/.local/bin:${PATH}"
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
 fi
 EOF
-fi
 
 echo "Installing pinned toolchain..."
 "$mise_bin" trust "$repo_root/mise.toml"
