@@ -23,7 +23,7 @@ git lfs install --skip-repo
 git lfs pull
 
 mise_version="v2026.7.13"
-mise_bin="$(command -v mise || true)"
+mise_bin="$(type -P mise || true)"
 if [[ -z "$mise_bin" ]]; then
   case "$(uname -m)" in
     x86_64)
@@ -61,20 +61,33 @@ if [[ ! -x "$mise_bin" ]]; then
 fi
 
 profile_file="$HOME/.bash_profile"
-profile_marker="# krosdai-scaffold mise activation"
+profile_start="# >>> krosdai-scaffold mise activation >>>"
+profile_end="# <<< krosdai-scaffold mise activation <<<"
 if [[ ! -e "$profile_file" ]]; then
   printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >"$profile_file"
 fi
-if grep -Fqx "$profile_marker" "$profile_file"; then
-  sed -i "\|^${profile_marker}$|,/^fi$/d" "$profile_file"
+profile_start_count="$(grep -Fxc "$profile_start" "$profile_file" || true)"
+profile_end_count="$(grep -Fxc "$profile_end" "$profile_file" || true)"
+if [[ "$profile_start_count" == 1 && "$profile_end_count" == 1 ]]; then
+  profile_start_line="$(grep -Fnx "$profile_start" "$profile_file" | cut -d: -f1)"
+  profile_end_line="$(grep -Fnx "$profile_end" "$profile_file" | cut -d: -f1)"
+  if ((profile_start_line >= profile_end_line)); then
+    echo "Invalid mise activation block in $profile_file" >&2
+    exit 1
+  fi
+  sed -i "${profile_start_line},${profile_end_line}d" "$profile_file"
+elif [[ "$profile_start_count" != 0 || "$profile_end_count" != 0 ]]; then
+  echo "Incomplete mise activation block in $profile_file" >&2
+  exit 1
 fi
-printf '%s\n' "$profile_marker" >>"$profile_file"
+printf '%s\n' "$profile_start" >>"$profile_file"
 cat >>"$profile_file" <<'EOF'
 export PATH="${HOME}/.local/bin:${PATH}"
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate bash)"
 fi
 EOF
+printf '%s\n' "$profile_end" >>"$profile_file"
 
 echo "Installing pinned toolchain..."
 "$mise_bin" trust "$repo_root/mise.toml"
