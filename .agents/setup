@@ -14,10 +14,13 @@ if ((${#packages[@]})); then
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
   else
-    sudo apt-get update
-    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+    sudo -n apt-get update
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
   fi
 fi
+
+git lfs install --skip-repo
+git lfs pull
 
 mise_bin="$(command -v mise || true)"
 if [[ -z "$mise_bin" ]]; then
@@ -33,7 +36,9 @@ fi
 
 profile_file="$HOME/.bash_profile"
 profile_marker="# krosdai-scaffold mise activation"
-touch "$profile_file"
+if [[ ! -e "$profile_file" ]]; then
+  printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >"$profile_file"
+fi
 if ! grep -Fqx "$profile_marker" "$profile_file"; then
   cat >>"$profile_file" <<EOF
 
