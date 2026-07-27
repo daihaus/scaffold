@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+packages=()
+command -v curl >/dev/null 2>&1 || packages+=(ca-certificates curl)
+command -v git-lfs >/dev/null 2>&1 || packages+=(git-lfs)
+
+if ((${#packages[@]})); then
+  echo "Installing system packages: ${packages[*]}"
+  if ((EUID == 0)); then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+  else
+    sudo apt-get update
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+  fi
+fi
+
+mise_bin="$(command -v mise || true)"
+if [[ -z "$mise_bin" ]]; then
+  echo "Installing mise..."
+  curl -fsSL https://mise.run | MISE_VERSION=v2026.7.13 sh
+  mise_bin="$HOME/.local/bin/mise"
+fi
+
+if [[ ! -x "$mise_bin" ]]; then
+  echo "mise was not installed at $mise_bin" >&2
+  exit 1
+fi
+
+profile_file="$HOME/.bash_profile"
+profile_marker="# krosdai-scaffold mise activation"
+touch "$profile_file"
+if ! grep -Fqx "$profile_marker" "$profile_file"; then
+  cat >>"$profile_file" <<EOF
+
+$profile_marker
+if [[ "\${PWD}" == "$repo_root" || "\${PWD}" == "$repo_root/"* ]]; then
+  export PATH="\${HOME}/.local/bin:\${PATH}"
+  eval "\$("$mise_bin" activate bash)"
+fi
+EOF
+fi
+
+echo "Installing pinned toolchain..."
+"$mise_bin" trust "$repo_root/mise.toml"
+"$mise_bin" install
+
+echo "Installing locked JavaScript dependencies..."
+"$mise_bin" exec -- pnpm install --frozen-lockfile
+
+echo "Installing locked Python dependencies..."
+"$mise_bin" exec -- uv sync --locked
+
+echo "Orb setup complete."
