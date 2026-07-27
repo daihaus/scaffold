@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+packages=()
+command -v curl >/dev/null 2>&1 || packages+=(ca-certificates curl)
+command -v git-lfs >/dev/null 2>&1 || packages+=(git-lfs)
+
+if ((${#packages[@]})); then
+  echo "Installing system packages: ${packages[*]}"
+  if ((EUID == 0)); then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+  else
+    sudo -n apt-get update
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+  fi
+fi
+
+git lfs install --skip-repo
+git lfs pull
+
+mise_version="v2026.7.13"
+mise_bin="$(type -P mise || true)"
+if [[ -z "$mise_bin" ]]; then
+  case "$(uname -m)" in
+    x86_64)
+      mise_arch="x64"
+      mise_sha256="2dfb74b2e09d1f73a4cfa0c4db0332418e39d35940b48f501b3b4004b59a379c"
+      ;;
+    aarch64 | arm64)
+      mise_arch="arm64"
+      mise_sha256="c002f9c3fd8ef7535afb5e20006cbdcc5f7e8144f7210057c241ec7e902743bc"
+      ;;
+    *)
+      echo "Unsupported architecture for mise: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  echo "Installing mise $mise_version..."
+  mise_archive="mise-${mise_version}-linux-${mise_arch}.tar.gz"
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "$temp_dir"' EXIT
+  curl -fsSL -o "$temp_dir/$mise_archive" \
+    "https://github.com/jdx/mise/releases/download/$mise_version/$mise_archive"
+  printf '%s  %s\n' "$mise_sha256" "$temp_dir/$mise_archive" | sha256sum --check
+  tar -xzf "$temp_dir/$mise_archive" -C "$temp_dir" mise/bin/mise
+  mkdir -p "$HOME/.local/bin"
+  install -m 0755 "$temp_dir/mise/bin/mise" "$HOME/.local/bin/mise"
+  rm -rf "$temp_dir"
+  trap - EXIT
+  mise_bin="$HOME/.local/bin/mise"
+fi
+
+if [[ ! -x "$mise_bin" ]]; then
+  echo "mise was not installed at $mise_bin" >&2
+  exit 1
+fi
+
+profile_file="$HOME/.bash_profile"
+profile_start="# >>> krosdai-scaffold mise activation >>>"
+profile_end="# <<< krosdai-scaffold mise activation <<<"
+if [[ ! -e "$profile_file" ]]; then
+  printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >"$profile_file"
+fi
+profile_start_count="$(grep -Fxc "$profile_start" "$profile_file" || true)"
+profile_end_count="$(grep -Fxc "$profile_end" "$profile_file" || true)"
+if [[ "$profile_start_count" == 1 && "$profile_end_count" == 1 ]]; then
+  profile_start_line="$(grep -Fnx "$profile_start" "$profile_file" | cut -d: -f1)"
+  profile_end_line="$(grep -Fnx "$profile_end" "$profile_file" | cut -d: -f1)"
+  if ((profile_start_line >= profile_end_line)); then
+    echo "Invalid mise activation block in $profile_file" >&2
+    exit 1
+  fi
+  sed -i "${profile_start_line},${profile_end_line}d" "$profile_file"
+elif [[ "$profile_start_count" != 0 || "$profile_end_count" != 0 ]]; then
+  echo "Incomplete mise activation block in $profile_file" >&2
+  exit 1
+fi
+printf '%s\n' "$profile_start" >>"$profile_file"
+cat >>"$profile_file" <<'EOF'
+export PATH="${HOME}/.local/bin:${PATH}"
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
+fi
+EOF
+printf '%s\n' "$profile_end" >>"$profile_file"
+
+echo "Installing pinned toolchain..."
+"$mise_bin" trust "$repo_root/mise.toml"
+"$mise_bin" install
+
+echo "Installing locked JavaScript dependencies..."
+"$mise_bin" exec -- pnpm install --frozen-lockfile
+
+echo "Installing locked Python dependencies..."
+"$mise_bin" exec -- uv sync --locked
+
+echo "Orb setup complete."
