@@ -5,8 +5,7 @@ A minimal bootstrap scaffold for TypeScript + Python + Rust monorepos.
 This repository is intentionally small. It provides the shared project hygiene that most
 repositories need before application code exists: tool and package manager pinning, strict
 TypeScript defaults, a modern Python toolchain (uv + Ruff), a Rust toolchain (Cargo +
-rustfmt + Clippy), formatting, linting, staged-file checks, CI, and editor/devcontainer
-hints.
+rustfmt + Clippy), formatting, linting, staged-file checks, and CI.
 
 ## What Is Included
 
@@ -18,7 +17,7 @@ Shared:
 - AutoCorrect CJK copywriting cleanup
 - Husky pre-commit and pre-push hooks with lint-staged
 - GitHub Actions lint and AI code-review workflows
-- Basic `.env.example`, `.gitignore`, VS Code, and devcontainer files
+- Basic `.env.example` and `.gitignore` files
 
 TypeScript:
 
