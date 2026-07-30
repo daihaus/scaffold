@@ -7,6 +7,7 @@ cd "$repo_root"
 packages=()
 command -v curl >/dev/null 2>&1 || packages+=(ca-certificates curl)
 command -v git-lfs >/dev/null 2>&1 || packages+=(git-lfs)
+command -v trash >/dev/null 2>&1 || packages+=(trash-cli)
 
 if ((${#packages[@]})); then
   echo "Installing system packages: ${packages[*]}"
@@ -22,43 +23,73 @@ fi
 git lfs install --skip-repo
 git lfs pull
 
-mise_version="v2026.7.13"
-mise_bin="$(type -P mise || true)"
-if [[ -z "$mise_bin" ]]; then
-  case "$(uname -m)" in
-    x86_64)
-      mise_arch="x64"
-      mise_sha256="2dfb74b2e09d1f73a4cfa0c4db0332418e39d35940b48f501b3b4004b59a379c"
-      ;;
-    aarch64 | arm64)
-      mise_arch="arm64"
-      mise_sha256="c002f9c3fd8ef7535afb5e20006cbdcc5f7e8144f7210057c241ec7e902743bc"
-      ;;
-    *)
-      echo "Unsupported architecture for mise: $(uname -m)" >&2
-      exit 1
-      ;;
-  esac
+rtk_bin="$HOME/.local/bin/rtk"
+echo "Installing the latest rtk release..."
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
 
-  echo "Installing mise $mise_version..."
-  mise_archive="mise-${mise_version}-linux-${mise_arch}.tar.gz"
-  temp_dir="$(mktemp -d)"
-  trap 'rm -rf "$temp_dir"' EXIT
-  curl -fsSL -o "$temp_dir/$mise_archive" \
-    "https://github.com/jdx/mise/releases/download/$mise_version/$mise_archive"
-  printf '%s  %s\n' "$mise_sha256" "$temp_dir/$mise_archive" | sha256sum --check
-  tar -xzf "$temp_dir/$mise_archive" -C "$temp_dir" mise/bin/mise
-  mkdir -p "$HOME/.local/bin"
-  install -m 0755 "$temp_dir/mise/bin/mise" "$HOME/.local/bin/mise"
-  rm -rf "$temp_dir"
-  trap - EXIT
-  mise_bin="$HOME/.local/bin/mise"
-fi
+echo "Installing global RTK instructions for Amp..."
+temp_dir="$(mktemp -d)"
+trap 'rm -rf "$temp_dir"' EXIT
+CODEX_HOME="$temp_dir" "$rtk_bin" init -g --codex >/dev/null
+install -d -m 0700 "$HOME/.config/amp"
+install -m 0644 "$temp_dir/RTK.md" "$HOME/.config/amp/RTK.md"
+rm -rf "$temp_dir"
+trap - EXIT
+
+echo "Installing the latest mise release..."
+curl -fsSL https://mise.run | sh
+mise_bin="$HOME/.local/bin/mise"
 
 if [[ ! -x "$mise_bin" ]]; then
   echo "mise was not installed at $mise_bin" >&2
   exit 1
 fi
+
+mise_tools_dir="$HOME/.config/mise/conf.d"
+mise_tools_file="$mise_tools_dir/scaffold-orb-tools.toml"
+install -d -m 0700 "$mise_tools_dir"
+orb_cli_tools=(
+  "rust"
+  "aqua:sharkdp/bat"
+  "aqua:Wilfred/difftastic"
+  "aqua:muesli/duf"
+  "aqua:bootandy/dust"
+  "aqua:eza-community/eza"
+  "aqua:sharkdp/fd"
+  "aqua:junegunn/fzf"
+  "aqua:charmbracelet/glow"
+  "aqua:sharkdp/hyperfine"
+  "aqua:jqlang/jq"
+  "aqua:casey/just"
+  "aqua:BurntSushi/ripgrep"
+  "aqua:chmln/sd"
+  "aqua:dbrgn/tealdeer"
+  "aqua:watchexec/watchexec"
+  "aqua:mikefarah/yq"
+  "npm:mcporter"
+)
+
+{
+  printf '%s\n' '# Managed by .agents/setup. Manual changes will be overwritten.' '[tools]'
+  for tool in "${orb_cli_tools[@]}"; do
+    printf '"%s" = "latest"\n' "$tool"
+  done
+} >"$mise_tools_file"
+chmod 0644 "$mise_tools_file"
+
+echo "Installing the latest Orb CLI tools..."
+"$mise_bin" install "${orb_cli_tools[@]/%/@latest}"
+
+cargo_bin_dir="$HOME/.cargo/bin"
+if [[ ! -x "$cargo_bin_dir/cargo-install-update" ]]; then
+  echo "Installing cargo-update..."
+  "$mise_bin" exec -- cargo install cargo-update
+fi
+if [[ ! -x "$cargo_bin_dir/tokei" ]]; then
+  echo "Installing tokei..."
+  "$mise_bin" exec -- cargo install tokei
+fi
+"$mise_bin" reshim
 
 profile_file="$HOME/.bash_profile"
 profile_start="# >>> krosdai-scaffold mise activation >>>"
@@ -82,14 +113,14 @@ elif [[ "$profile_start_count" != 0 || "$profile_end_count" != 0 ]]; then
 fi
 printf '%s\n' "$profile_start" >>"$profile_file"
 cat >>"$profile_file" <<'EOF'
-export PATH="${HOME}/.local/bin:${PATH}"
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"
 if command -v mise >/dev/null 2>&1; then
-  eval "$(mise activate bash)"
+  eval "$(mise activate bash --shims)"
 fi
 EOF
 printf '%s\n' "$profile_end" >>"$profile_file"
 
-echo "Installing pinned toolchain..."
+echo "Installing the repository toolchain..."
 "$mise_bin" trust "$repo_root/mise.toml"
 "$mise_bin" install
 
@@ -99,4 +130,70 @@ echo "Installing locked JavaScript dependencies..."
 echo "Installing locked Python dependencies..."
 "$mise_bin" exec -- uv sync --locked
 
-echo "Orb setup complete."
+mcporter_cmd=("$mise_bin" exec -- mcporter)
+if ! "${mcporter_cmd[@]}" config get context7 >/dev/null 2>&1; then
+  echo "Configuring Context7 MCP..."
+  "${mcporter_cmd[@]}" config add context7 --scope home \
+    --command "npx --yes @upstash/context7-mcp@latest"
+fi
+if ! "${mcporter_cmd[@]}" config get tavily >/dev/null 2>&1; then
+  echo "Configuring Tavily MCP..."
+  "${mcporter_cmd[@]}" config add tavily --scope home \
+    --command "npx --yes tavily-mcp@latest"
+fi
+"${mcporter_cmd[@]}" config doctor
+
+echo "Probing Context7 MCP schema..."
+"$mise_bin" exec -- npx --yes mcporter@latest list context7 --schema >/dev/null
+echo "Probing Tavily MCP schema..."
+"$mise_bin" exec -- npx --yes mcporter@latest list tavily --schema >/dev/null
+if [[ -z "${TAVILY_API_KEY:-}" ]]; then
+  echo "TAVILY_API_KEY is not set; Tavily tool calls require it."
+fi
+
+echo "Running final Orb health checks..."
+env -i \
+  HOME="$HOME" \
+  USER="${USER:-$(id -un)}" \
+  SHELL=/bin/bash \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  REPO_ROOT="$repo_root" \
+  /bin/bash -lc '
+    cd "$REPO_ROOT"
+    required_commands=(
+      autocorrect bat cargo cargo-install-update curl difft duf dust eza fd fzf gh git-lfs
+      glow hyperfine jq just mcporter mise node npx pnpm rg rtk rustc sd tldr tokei trash uv
+      watchexec yq
+    )
+    missing_commands=()
+    for command_name in "${required_commands[@]}"; do
+      command -v "$command_name" >/dev/null 2>&1 || missing_commands+=("$command_name")
+    done
+    if ((${#missing_commands[@]})); then
+      printf "Missing Orb commands: %s\n" "${missing_commands[*]}" >&2
+      exit 1
+    fi
+  '
+
+"$mise_bin" exec -- pnpm list --depth 0 >/dev/null
+"$mise_bin" exec -- pnpm exec oxfmt --version >/dev/null
+"$mise_bin" exec -- uv sync --locked --check >/dev/null
+"$mise_bin" exec -- uv run --locked ruff --version >/dev/null
+"${mcporter_cmd[@]}" config get context7 >/dev/null
+"${mcporter_cmd[@]}" config get tavily >/dev/null
+
+if "$mise_bin" exec -- gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI authentication is ready."
+else
+  echo "GitHub CLI is not authenticated; authenticate before GitHub write operations."
+fi
+
+signing_key="$(git config --global --get user.signingkey 2>/dev/null || true)"
+commit_signing="$(git config --global --get commit.gpgsign 2>/dev/null || true)"
+if [[ -n "$signing_key" && "$commit_signing" == "true" ]]; then
+  echo "Git commit signing is configured."
+else
+  echo "Git commit signing is not configured in this Orb."
+fi
+
+echo "Orb setup and health checks complete."
