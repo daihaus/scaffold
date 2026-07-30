@@ -1,5 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PATH="$HOME/.local/share/mise/shims:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
+rtk_bin="$HOME/.local/bin/rtk"
+rtk_instructions="$HOME/.config/amp/RTK.md"
+if [[ ! -x "$rtk_bin" ]]; then
+  echo "rtk is missing; rerun .agents/setup to restore the Orb environment." >&2
+  exit 1
+fi
+
+if [[ ! -s "$rtk_instructions" ]]; then
+  echo "Restoring global RTK instructions for Amp..."
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "$temp_dir"' EXIT
+  CODEX_HOME="$temp_dir" "$rtk_bin" init -g --codex >/dev/null
+  install -d -m 0700 "$(dirname "$rtk_instructions")"
+  install -m 0644 "$temp_dir/RTK.md" "$rtk_instructions"
+  rm -rf "$temp_dir"
+  trap - EXIT
+fi
+
+mise_bin="$HOME/.local/bin/mise"
+mise_tools_file="$HOME/.config/mise/conf.d/scaffold-orb-tools.toml"
+if [[ ! -x "$mise_bin" || ! -s "$mise_tools_file" ]]; then
+  echo "Orb CLI tooling is incomplete; rerun .agents/setup to restore it." >&2
+  exit 1
+fi
+if [[ ! -x "$HOME/.cargo/bin/cargo-install-update" || ! -x "$HOME/.cargo/bin/tokei" ]]; then
+  echo "System Cargo packages are incomplete; rerun .agents/setup to restore them." >&2
+  exit 1
+fi
+"$mise_bin" reshim
+
 # This scaffold has no persistent services or tunnels to restore.
 echo "No repository services need to be resumed."
