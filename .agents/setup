@@ -26,6 +26,10 @@ git lfs pull
 rtk_bin="$HOME/.local/bin/rtk"
 echo "Installing the latest rtk release..."
 curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+if [[ ! -x "$rtk_bin" ]]; then
+  echo "rtk was not installed at $rtk_bin" >&2
+  exit 1
+fi
 
 echo "Installing global RTK instructions for Amp..."
 temp_dir="$(mktemp -d)"
@@ -77,6 +81,10 @@ orb_cli_tools=(
 } >"$mise_tools_file"
 chmod 0644 "$mise_tools_file"
 
+echo "Bootstrapping the repository Node.js runtime..."
+"$mise_bin" trust "$repo_root/mise.toml"
+"$mise_bin" install node
+
 echo "Installing the latest Orb CLI tools..."
 "$mise_bin" install "${orb_cli_tools[@]/%/@latest}"
 
@@ -121,7 +129,6 @@ EOF
 printf '%s\n' "$profile_end" >>"$profile_file"
 
 echo "Installing the repository toolchain..."
-"$mise_bin" trust "$repo_root/mise.toml"
 "$mise_bin" install
 
 echo "Installing locked JavaScript dependencies..."
