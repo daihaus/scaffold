@@ -31,12 +31,6 @@ if [[ ! -x "$mise_bin" || ! -s "$mise_tools_file" ]]; then
   exit 1
 fi
 
-github_token_status="$("$mise_bin" token github 2>/dev/null || true)"
-if [[ -z "$github_token_status" || "$github_token_status" == *"(none)"* ]]; then
-  echo "mise cannot resolve GitHub API credentials; set GITHUB_API_TOKEN or configure another mise GitHub token source." >&2
-  exit 1
-fi
-
 "$mise_bin" reshim
 
 required_commands=(
