@@ -49,6 +49,44 @@ if [[ ! -x "$mise_bin" ]]; then
   exit 1
 fi
 
+export PATH="$HOME/.local/share/mise/shims:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
+profile_file="$HOME/.bash_profile"
+profile_start="# >>> krosdai-scaffold mise activation >>>"
+profile_end="# <<< krosdai-scaffold mise activation <<<"
+if [[ ! -e "$profile_file" ]]; then
+  printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >"$profile_file"
+fi
+profile_start_count="$(grep -Fxc "$profile_start" "$profile_file" || true)"
+profile_end_count="$(grep -Fxc "$profile_end" "$profile_file" || true)"
+if [[ "$profile_start_count" == 1 && "$profile_end_count" == 1 ]]; then
+  profile_start_line="$(grep -Fnx "$profile_start" "$profile_file" | cut -d: -f1)"
+  profile_end_line="$(grep -Fnx "$profile_end" "$profile_file" | cut -d: -f1)"
+  if ((profile_start_line >= profile_end_line)); then
+    echo "Invalid mise activation block in $profile_file" >&2
+    exit 1
+  fi
+  sed -i "${profile_start_line},${profile_end_line}d" "$profile_file"
+elif [[ "$profile_start_count" != 0 || "$profile_end_count" != 0 ]]; then
+  echo "Incomplete mise activation block in $profile_file" >&2
+  exit 1
+fi
+printf '%s\n' "$profile_start" >>"$profile_file"
+cat >>"$profile_file" <<'EOF'
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash --shims)"
+fi
+EOF
+printf '%s\n' "$profile_end" >>"$profile_file"
+
+github_token_status="$("$mise_bin" token github 2>/dev/null || true)"
+if [[ -z "$github_token_status" || "$github_token_status" == *"(none)"* ]]; then
+  echo "mise cannot resolve GitHub API credentials; set GITHUB_API_TOKEN or configure another mise GitHub token source." >&2
+  exit 1
+fi
+echo "mise GitHub API authentication is ready."
+
 mise_tools_dir="$HOME/.config/mise/conf.d"
 mise_tools_file="$mise_tools_dir/scaffold-orb-tools.toml"
 install -d -m 0700 "$mise_tools_dir"
@@ -98,35 +136,6 @@ if [[ ! -x "$cargo_bin_dir/tokei" ]]; then
   "$mise_bin" exec -- cargo install tokei
 fi
 "$mise_bin" reshim
-
-profile_file="$HOME/.bash_profile"
-profile_start="# >>> krosdai-scaffold mise activation >>>"
-profile_end="# <<< krosdai-scaffold mise activation <<<"
-if [[ ! -e "$profile_file" ]]; then
-  printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >"$profile_file"
-fi
-profile_start_count="$(grep -Fxc "$profile_start" "$profile_file" || true)"
-profile_end_count="$(grep -Fxc "$profile_end" "$profile_file" || true)"
-if [[ "$profile_start_count" == 1 && "$profile_end_count" == 1 ]]; then
-  profile_start_line="$(grep -Fnx "$profile_start" "$profile_file" | cut -d: -f1)"
-  profile_end_line="$(grep -Fnx "$profile_end" "$profile_file" | cut -d: -f1)"
-  if ((profile_start_line >= profile_end_line)); then
-    echo "Invalid mise activation block in $profile_file" >&2
-    exit 1
-  fi
-  sed -i "${profile_start_line},${profile_end_line}d" "$profile_file"
-elif [[ "$profile_start_count" != 0 || "$profile_end_count" != 0 ]]; then
-  echo "Incomplete mise activation block in $profile_file" >&2
-  exit 1
-fi
-printf '%s\n' "$profile_start" >>"$profile_file"
-cat >>"$profile_file" <<'EOF'
-export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"
-if command -v mise >/dev/null 2>&1; then
-  eval "$(mise activate bash --shims)"
-fi
-EOF
-printf '%s\n' "$profile_end" >>"$profile_file"
 
 echo "Installing the repository toolchain..."
 "$mise_bin" install
@@ -178,6 +187,11 @@ env -i \
     done
     if ((${#missing_commands[@]})); then
       printf "Missing Orb commands: %s\n" "${missing_commands[*]}" >&2
+      exit 1
+    fi
+    node_version="$(node --version 2>/dev/null || true)"
+    if [[ "$node_version" != v24.* ]]; then
+      printf "Expected mise-managed Node.js 24, found %s.\n" "${node_version:-none}" >&2
       exit 1
     fi
   '

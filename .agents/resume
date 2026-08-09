@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
 export PATH="$HOME/.local/share/mise/shims:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 
 rtk_bin="$HOME/.local/bin/rtk"
@@ -27,11 +30,34 @@ if [[ ! -x "$mise_bin" || ! -s "$mise_tools_file" ]]; then
   echo "Orb CLI tooling is incomplete; rerun .agents/setup to restore it." >&2
   exit 1
 fi
-if [[ ! -x "$HOME/.cargo/bin/cargo-install-update" || ! -x "$HOME/.cargo/bin/tokei" ]]; then
-  echo "System Cargo packages are incomplete; rerun .agents/setup to restore them." >&2
+
+github_token_status="$("$mise_bin" token github 2>/dev/null || true)"
+if [[ -z "$github_token_status" || "$github_token_status" == *"(none)"* ]]; then
+  echo "mise cannot resolve GitHub API credentials; set GITHUB_API_TOKEN or configure another mise GitHub token source." >&2
   exit 1
 fi
+
 "$mise_bin" reshim
+
+required_commands=(
+  autocorrect bat cargo cargo-install-update curl difft duf dust eza fd fzf gh git-lfs
+  glow hyperfine jq just mcporter mise node npx pnpm rg rtk rustc sd tldr tokei trash uv
+  watchexec yq
+)
+missing_commands=()
+for command_name in "${required_commands[@]}"; do
+  command -v "$command_name" >/dev/null 2>&1 || missing_commands+=("$command_name")
+done
+if ((${#missing_commands[@]})); then
+  printf "Missing Orb commands: %s. Rerun .agents/setup to restore them.\n" "${missing_commands[*]}" >&2
+  exit 1
+fi
+
+node_version="$(node --version 2>/dev/null || true)"
+if [[ "$node_version" != v24.* ]]; then
+  printf "Expected mise-managed Node.js 24, found %s; rerun .agents/setup to restore it.\n" "${node_version:-none}" >&2
+  exit 1
+fi
 
 # This scaffold has no persistent services or tunnels to restore.
 echo "No repository services need to be resumed."
