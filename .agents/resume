@@ -47,9 +47,13 @@ if ((${#missing_commands[@]})); then
   exit 1
 fi
 
+if ! expected_node_version="$("$mise_bin" current node 2>/dev/null)"; then
+  echo "mise cannot resolve the configured Node.js version; rerun .agents/setup to restore it." >&2
+  exit 1
+fi
 node_version="$(node --version 2>/dev/null || true)"
-if [[ "$node_version" != v24.* ]]; then
-  printf "Expected mise-managed Node.js 24, found %s; rerun .agents/setup to restore it.\n" "${node_version:-none}" >&2
+if [[ "$node_version" != "v$expected_node_version" ]]; then
+  printf "Expected mise-managed Node.js v%s, found %s; rerun .agents/setup to restore it.\n" "$expected_node_version" "${node_version:-none}" >&2
   exit 1
 fi
 

@@ -170,12 +170,18 @@ if [[ -z "${TAVILY_API_KEY:-}" ]]; then
   echo "TAVILY_API_KEY is not set; Tavily tool calls require it."
 fi
 
+if ! expected_node_version="$("$mise_bin" current node 2>/dev/null)"; then
+  echo "mise cannot resolve the configured Node.js version." >&2
+  exit 1
+fi
+
 echo "Running final Orb health checks..."
 env -i \
   HOME="$HOME" \
   USER="${USER:-$(id -un)}" \
   SHELL=/bin/bash \
   PATH=/usr/local/bin:/usr/bin:/bin \
+  EXPECTED_NODE_VERSION="v$expected_node_version" \
   REPO_ROOT="$repo_root" \
   /bin/bash -lc '
     cd "$REPO_ROOT"
@@ -193,8 +199,8 @@ env -i \
       exit 1
     fi
     node_version="$(node --version 2>/dev/null || true)"
-    if [[ "$node_version" != v24.* ]]; then
-      printf "Expected mise-managed Node.js 24, found %s.\n" "${node_version:-none}" >&2
+    if [[ "$node_version" != "$EXPECTED_NODE_VERSION" ]]; then
+      printf "Expected mise-managed Node.js %s, found %s.\n" "$EXPECTED_NODE_VERSION" "${node_version:-none}" >&2
       exit 1
     fi
   '
