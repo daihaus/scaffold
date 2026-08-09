@@ -170,7 +170,10 @@ if [[ -z "${TAVILY_API_KEY:-}" ]]; then
   echo "TAVILY_API_KEY is not set; Tavily tool calls require it."
 fi
 
-if ! expected_node_version="$("$mise_bin" current node 2>/dev/null)"; then
+if ! expected_node_version="$(
+  "$mise_bin" ls --current --json node 2>/dev/null |
+    jq -er 'map(select(.active and .installed)) | first | .version // empty'
+)"; then
   echo "mise cannot resolve the configured Node.js version." >&2
   exit 1
 fi

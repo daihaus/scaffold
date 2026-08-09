@@ -47,7 +47,10 @@ if ((${#missing_commands[@]})); then
   exit 1
 fi
 
-if ! expected_node_version="$("$mise_bin" current node 2>/dev/null)"; then
+if ! expected_node_version="$(
+  "$mise_bin" ls --current --json node 2>/dev/null |
+    jq -er 'map(select(.active and .installed)) | first | .version // empty'
+)"; then
   echo "mise cannot resolve the configured Node.js version; rerun .agents/setup to restore it." >&2
   exit 1
 fi
