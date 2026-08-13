@@ -1,0 +1,5 @@
+{
+  "name": "Monorepo Scaffold",
+  "user": "ubuntu",
+  "install": "./.cursor/install.sh"
+}
