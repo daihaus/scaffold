@@ -49,10 +49,12 @@ write_activation_block() {
 $activation_start
 export PATH="\$HOME/.local/bin:\$PATH"
 if command -v mise >/dev/null 2>&1; then
-  case ":\$PATH:" in
-    *":\$HOME/.local/share/mise/shims:"*) ;;
-    *) eval "\$(mise activate bash --shims)" ;;
-  esac
+  # Activate unconditionally so the shims directory is prepended here. In a
+  # login shell ~/.profile sources ~/.bashrc first and then re-prepends
+  # ~/.local/bin, so ~/.bash_profile (sourced last) must re-activate to keep
+  # the mise shims ahead of ~/.local/bin. A harmless duplicate PATH entry is
+  # preferable to shims losing precedence.
+  eval "\$(mise activate bash --shims)"
 fi
 $activation_end
 EOF
