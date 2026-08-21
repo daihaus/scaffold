@@ -28,7 +28,8 @@ Layout:
 
 Tools are pinned and managed by [mise](https://mise.jdx.dev) (`mise.toml`): Node.js, pnpm,
 uv, AutoCorrect. Rust is **opt-in** — uncomment the `rust` line in `mise.toml` and run
-`mise install` when adding the first crate. Until then the Rust lint/format steps are no-ops.
+`mise install` when adding the first crate. Until a crate exists under `apps/` or `packages/`,
+the Rust lint/format steps are no-ops (the root `Cargo.toml` is only the workspace manifest).
 
 Setup:
 
@@ -49,7 +50,8 @@ Run these from the repository root.
 
 - **JS/TS**: Oxlint (type-aware) + Oxfmt. One root `.oxlintrc.json` lints the whole monorepo.
 - **Python**: Ruff lint + format, configured in the root `pyproject.toml`; one shared lockfile.
-- **Rust**: rustfmt + Clippy (`-D warnings`). No-ops until the first `Cargo.toml` appears.
+- **Rust**: rustfmt + Clippy (`-D warnings`). No-ops until a crate `Cargo.toml` exists under
+  `apps/` or `packages/`.
 - **Text/CJK**: AutoCorrect, run through mise.
 
 ## Conventions for agents
